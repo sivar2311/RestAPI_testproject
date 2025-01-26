@@ -6,18 +6,17 @@
 
 class RestAPI : public Settings {
   public:
-    RestAPI(const char* json);
+    RestAPI(AsyncWebServer* server);
 
     using Settings::begin;
     using Settings::end;
 
-    void begin(AsyncWebServer* server, const String& baseRoute, const String& pageRoute);
+    void begin(const String& baseRoute, const String& pageRoute);
 
   protected:
     AsyncWebServer* server     = nullptr;
     String          baseRoute  = "";
     String          pageRoute  = "";
-    const char*     jsonSchema = nullptr;
 
   protected:
     void pageGET(AsyncWebServerRequest* request);

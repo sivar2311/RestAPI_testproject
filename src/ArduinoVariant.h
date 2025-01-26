@@ -39,8 +39,6 @@ template <typename T, typename>
 Variant::Variant(T other)
     : value(other) {}
 
-
-
 template <typename T>
 bool Variant::is() const {
     return std::holds_alternative<T>(value);

@@ -9,6 +9,7 @@ const char* WIFI_PASS = "";
 const int   WIFI_CHAN = 6;
 
 AsyncWebServer server(80);
+RestAPI api(&server);
 
 void setupWiFi() {
     Serial.print("Connecting Wifi");
@@ -22,31 +23,8 @@ void setupWiFi() {
     Serial.println(WiFi.localIP());
 }
 
-const char* jsonSchema = R"json({
-  "properties": {
-    "name": {
-      "type": "string",
-      "cppType": "String"
-    },
-    "age": {
-      "type": "number",
-      "cppType": "uint8_t"
-    },
-    "temperature": {
-      "type": "number", 
-      "cppType": "float"
-    },
-    "admin" : {
-      "type" : "checkbox",
-      "cppType": "bool"
-    }
-  }
-})json";
-
-RestAPI api(jsonSchema);
-
 void setupServer() {
-    api.begin(&server, "/api", "/settings");
+    api.begin("/api", "/settings");
     server.begin();
 }
 
