@@ -1,15 +1,33 @@
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
+#include <Preferences.h>
 #include <WiFi.h>
-
 #include "RestAPI.h"
 
-const char* WIFI_SSID = "Wokwi-GUEST";
+const char* WIFI_SSID = "";
 const char* WIFI_PASS = "";
-const int   WIFI_CHAN = 6;
 
 AsyncWebServer server(80);
-RestAPI api(&server);
+RestAPI        api(&server);
+Preferences    prefs;
+
+void loadPreferences() {
+    prefs.begin("rest-api");
+    api["name"]        = prefs.getString("name", "John");
+    api["age"]         = prefs.getInt("age", 42);
+    api["temperature"] = prefs.getFloat("temperature", 36.6f);
+    api["admin"]       = prefs.getBool("admin", true);
+    Serial.println("Values loaded");
+    for (auto& [key, value] : api) Serial.printf("%s = %s\r\n", key.c_str(), value.as<String>().c_str());
+}
+
+void savePreferences() {
+    prefs.putString("name", api["name"].as<String>());
+    prefs.putInt("age", api["name"].as<int>());
+    prefs.putFloat("temperature", api["temperature"].as<float>());
+    prefs.putBool("admin", api["admin"].as<bool>());
+    Serial.println("Values saved");
+}
 
 void setupWiFi() {
     Serial.print("Connecting Wifi");
@@ -25,30 +43,18 @@ void setupWiFi() {
 
 void setupServer() {
     api.begin("/api", "/settings");
+    server.on("/api/save", HTTP_GET, [](AsyncWebServerRequest* req) { savePreferences(); req->send(200, "text/plain", "Values stored"); });
+    server.on("/api/load", HTTP_GET, [](AsyncWebServerRequest* req) { loadPreferences(); req->send(200, "text/plain", "Values loaded"); });
     server.begin();
-}
-
-void loadValues() {
-    // kann später mit Preferences genutzt werden um Werte zu laden
-    api["name"]        = "John";
-    api["age"]         = 42;
-    api["temperature"] = 36.6;
-
-    // alternative Möglichkeit der Zuweisung:
-    auto& admin = api["admin"];
-    admin       = true;
 }
 
 void setup() {
     Serial.begin(115200);
 
-    loadValues();
-
+    loadPreferences();
     setupWiFi();
     setupServer();
 }
 
 void loop() {
-    Serial.println("alive");
-    delay(1000);
 }
