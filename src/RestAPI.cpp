@@ -67,7 +67,6 @@ void RestAPI::apiPATCH(AsyncWebServerRequest* request, uint8_t* data, size_t len
 }
 
 void RestAPI::jsonSchemaGET(AsyncWebServerRequest* request) {
-    Serial.println("jsonSchema");
     JsonDocument doc;
 
     for (auto& [key, value] : settings) {

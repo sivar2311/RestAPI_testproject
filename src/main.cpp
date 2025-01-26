@@ -17,13 +17,14 @@ void loadPreferences() {
     api["age"]         = prefs.getInt("age", 42);
     api["temperature"] = prefs.getFloat("temperature", 36.6f);
     api["admin"]       = prefs.getBool("admin", true);
+
     Serial.println("Values loaded");
     for (auto& [key, value] : api) Serial.printf("%s = %s\r\n", key.c_str(), value.as<String>().c_str());
 }
 
 void savePreferences() {
     prefs.putString("name", api["name"].as<String>());
-    prefs.putInt("age", api["name"].as<int>());
+    prefs.putInt("age", api["age"].as<int32_t>());
     prefs.putFloat("temperature", api["temperature"].as<float>());
     prefs.putBool("admin", api["admin"].as<bool>());
     Serial.println("Values saved");
@@ -43,8 +44,8 @@ void setupWiFi() {
 
 void setupServer() {
     api.begin("/api", "/settings");
-    server.on("/api/save", HTTP_GET, [](AsyncWebServerRequest* req) { savePreferences(); req->send(200, "text/plain", "Values stored"); });
-    server.on("/api/load", HTTP_GET, [](AsyncWebServerRequest* req) { loadPreferences(); req->send(200, "text/plain", "Values loaded"); });
+    server.on("/save", HTTP_GET, [](AsyncWebServerRequest* req) { savePreferences(); req->send(200, "text/plain", "Values stored"); });
+    server.on("/load", HTTP_GET, [](AsyncWebServerRequest* req) { loadPreferences(); req->send(200, "text/plain", "Values loaded"); });
     server.begin();
 }
 
