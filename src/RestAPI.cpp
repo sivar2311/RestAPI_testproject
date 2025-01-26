@@ -7,11 +7,12 @@
 static void                 value2doc(Variant& value, JsonDocument& doc, const String& key = "value");
 static void                 doc2value(Variant& value, JsonDocument& doc, const String& key = "value");
 static void                 jsonVariant2value(JsonVariant& jsonValue, Variant& value);
-static void                 settings2doc(std::map<String, Variant>& settings, JsonDocument& doc);
-static void                 doc2settings(std::map<String, Variant>& settings, JsonDocument& doc);
+static void                 settings2doc(std::vector<std::pair<String, Variant>>& settings, JsonDocument& doc);
+static void                 doc2settings(std::vector<std::pair<String, Variant>>& settings, JsonDocument& doc);
 static AsyncResponseStream* beginJsonResponse(AsyncWebServerRequest* request);
 
-RestAPI::RestAPI(AsyncWebServer* server) : server(server) {}
+RestAPI::RestAPI(AsyncWebServer* server)
+    : server(server) {}
 
 void RestAPI::begin(const String& baseRoute, const String& pageRoute) {
     if (!server) return;
@@ -143,18 +144,20 @@ void jsonVariant2value(JsonVariant& jsonValue, Variant& value) {
     jsonVariant2valueImpl(jsonValue, value, std::tuple<String, bool, int, float, double, int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t>{});
 }
 
-static void settings2doc(std::map<String, Variant>& settings, JsonDocument& doc) {
+static void settings2doc(std::vector<std::pair<String, Variant>>& settings, JsonDocument& doc) {
     for (auto& [key, value] : settings) value2doc(value, doc, key);
 }
 
-static void doc2settings(std::map<String, Variant>& settings, JsonDocument& doc) {
+static void doc2settings(std::vector<std::pair<String, Variant>>& settings, JsonDocument& doc) {
     for (JsonPair kv : doc.as<JsonObject>()) {
         const char* key = kv.key().c_str();
-        if (settings.find(key) != settings.end()) {
-            auto     jsonValue = kv.value();
-            Variant& value     = settings[key];
+        JsonVariant jsonValue = kv.value();
 
-            jsonVariant2value(jsonValue, value);
+        for (auto& setting : settings) {
+            if (setting.first == key) {
+                Variant& value = setting.second;
+                jsonVariant2value(jsonValue, value);
+            }
         }
     }
 }

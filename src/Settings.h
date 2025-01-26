@@ -2,11 +2,12 @@
 
 #include "ArduinoVariant.h"
 #include <WString.h>
-#include <map>
+#include <vector>
 
 class Settings {
   public:
-    using Iterator = std::map<String, Variant>::iterator;
+    // using Iterator = std::map<String, Variant>::iterator;
+    using Iterator = std::vector<std::pair<String, Variant>>::iterator;
 
   public:
     Iterator begin();
@@ -14,5 +15,6 @@ class Settings {
     Variant& operator[](const char* key);
 
   protected:
-    std::map<String, Variant> settings;
+  std::vector<std::pair<String, Variant>> settings;
+    // std::map<String, Variant> settings;
 };
