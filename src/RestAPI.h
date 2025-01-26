@@ -7,7 +7,6 @@
 class RestAPI : public Settings {
   public:
     RestAPI(const char* json);
-    Variant& operator[](const char* key);
 
     using Settings::begin;
     using Settings::end;

@@ -3,19 +3,16 @@
 #include <ArduinoJson.h>
 
 static void parseSchema(std::map<String, Variant>& settings, const char* jsonSchema);
-static void value2doc(const String& key, Variant& value, JsonDocument& doc);
-static void doc2value(const String& key, Variant& value, JsonDocument& doc);
+static void value2doc(Variant& value, JsonDocument& doc, const String& key = "value");
+static void doc2value(Variant& value, JsonDocument& doc, const String& key = "value");
 static void jsonVariant2value(JsonVariant& jsonValue, Variant& value);
 static void settings2doc(std::map<String, Variant>& settings, JsonDocument& doc);
 static void doc2settings(std::map<String, Variant>& settings, JsonDocument& doc);
+static AsyncResponseStream* beginJsonResponse(AsyncWebServerRequest* request);
 
 RestAPI::RestAPI(const char* jsonSchema)
     : jsonSchema(jsonSchema) {
     parseSchema(settings, jsonSchema);
-}
-
-Variant& RestAPI::operator[](const char* key) {
-    return settings[key];
 }
 
 void RestAPI::begin(AsyncWebServer* server, const String& baseRoute, const String& pageRoute) {
@@ -31,7 +28,7 @@ void RestAPI::pageGET(AsyncWebServerRequest* request) {
 }
 
 void RestAPI::apiGET(AsyncWebServerRequest* request) {
-    auto response = request->beginResponseStream("application/Json");
+    auto response = beginJsonResponse(request);
 
     JsonDocument responseDoc;
     settings2doc(settings, responseDoc);
@@ -41,10 +38,10 @@ void RestAPI::apiGET(AsyncWebServerRequest* request) {
 }
 
 void RestAPI::elementGET(Variant& value, AsyncWebServerRequest* request) {
-    auto response = request->beginResponseStream("application/Json");
+    auto response = beginJsonResponse(request);
 
     JsonDocument responseDoc;
-    value2doc("value", value, responseDoc);
+    value2doc(value, responseDoc);
     serializeJson(responseDoc, *response);
 
     request->send(response);
@@ -54,12 +51,12 @@ void RestAPI::elementPATCH(Variant& value, AsyncWebServerRequest* request, uint8
     JsonDocument requestDoc;
     deserializeJson(requestDoc, data, len);
 
-    auto response = request->beginResponseStream("application/json");
+    auto response = beginJsonResponse(request);
 
-    doc2value("value", value, requestDoc);
+    doc2value(value, requestDoc);
 
     JsonDocument responseDoc;
-    value2doc("value", value, responseDoc);
+    value2doc(value, responseDoc);
     serializeJson(responseDoc, *response);
     request->send(response);
 }
@@ -97,78 +94,93 @@ static void parseSchema(std::map<String, Variant>& settings, const char* jsonSch
 
     JsonObject properties = doc["properties"];
 
+    std::map<String, std::function<void(const JsonVariant&, Variant&)>> typeMap = {
+        {"String", [](const JsonVariant& jsonValue, Variant& value) { value = jsonValue.as<const char*>(); }},
+        {"int", [](const JsonVariant& jsonValue, Variant& value) { value = jsonValue.as<int>(); }},
+        {"float", [](const JsonVariant& jsonValue, Variant& value) { value = jsonValue.as<float>(); }},
+        {"double", [](const JsonVariant& jsonValue, Variant& value) { value = jsonValue.as<double>(); }},
+        {"bool", [](const JsonVariant& jsonValue, Variant& value) { value = jsonValue.as<bool>(); }},
+        {"int8_t", [](const JsonVariant& jsonValue, Variant& value) { value = jsonValue.as<int8_t>(); }},
+        {"uint8_t", [](const JsonVariant& jsonValue, Variant& value) { value = jsonValue.as<uint8_t>(); }},
+        {"int16_t", [](const JsonVariant& jsonValue, Variant& value) { value = jsonValue.as<int16_t>(); }},
+        {"uint16_t", [](const JsonVariant& jsonValue, Variant& value) { value = jsonValue.as<uint16_t>(); }},
+        {"int32_t", [](const JsonVariant& jsonValue, Variant& value) { value = jsonValue.as<int32_t>(); }},
+        {"uint32_t", [](const JsonVariant& jsonValue, Variant& value) { value = jsonValue.as<uint32_t>(); }},
+        {"int64_t", [](const JsonVariant& jsonValue, Variant& value) { value = jsonValue.as<int64_t>(); }},
+        {"uint64_t", [](const JsonVariant& jsonValue, Variant& value) { value = jsonValue.as<uint64_t>(); }},
+    };
+
     for (JsonPair kv : properties) {
         const char* key = kv.key().c_str();
         if (!properties[key]["cppType"]) continue;
         String cppType = properties[key]["cppType"] | "";
 
         JsonVariant jsonValue = kv.value()["value"];
-        if (cppType == "String") settings[key] = jsonValue.as<const char*>();
-        if (cppType == "int") settings[key] = jsonValue.as<int>();
-        if (cppType == "float") settings[key] = jsonValue.as<float>();
-        if (cppType == "double") settings[key] = jsonValue.as<double>();
-        if (cppType == "bool") settings[key] = jsonValue.as<bool>();
-        if (cppType == "int8_t") settings[key] = jsonValue.as<int8_t>();
-        if (cppType == "uint8_t") settings[key] = jsonValue.as<uint8_t>();
-        if (cppType == "int16_t") settings[key] = jsonValue.as<int16_t>();
-        if (cppType == "uint16_t") settings[key] = jsonValue.as<uint16_t>();
-        if (cppType == "int32_t") settings[key] = jsonValue.as<int32_t>();
-        if (cppType == "uint32_t") settings[key] = jsonValue.as<uint32_t>();
-        if (cppType == "int64_t") settings[key] = jsonValue.as<int64_t>();
-        if (cppType == "uint64_t") settings[key] = jsonValue.as<uint64_t>();
+        if (typeMap.find(cppType) != typeMap.end()) {
+            typeMap[cppType](jsonValue, settings[key]);
+        }
     }
 }
 
-static void value2doc(const String& key, Variant& value, JsonDocument& doc) {
-    if (value.isBool()) doc[key] = value.asBool();
-    if (value.isDouble()) doc[key] = value.asDouble();
-    if (value.isFloat()) doc[key] = value.asFloat();
-    if (value.isString()) doc[key] = value.asString();
-    if (value.isInt()) doc[key] = value.asInt();
-    if (value.isI8()) doc[key] = value.asI8();
-    if (value.isU8()) doc[key] = value.asU8();
-    if (value.isI16()) doc[key] = value.asI16();
-    if (value.isU16()) doc[key] = value.asU16();
-    if (value.isI32()) doc[key] = value.asI32();
-    if (value.isU32()) doc[key] = value.asU32();
-    if (value.isI64()) doc[key] = value.asI64();
-    if (value.isU64()) doc[key] = value.asU64();
+template <typename... Types>
+void value2docImpl(Variant& value, JsonDocument& doc, std::tuple<Types...>, const String& key) {
+    auto assignValue = [&](auto type) {
+        using T = decltype(type);
+        if (value.is<T>()) {
+            doc[key] = value.as<T>();
+        }
+    };
+    (assignValue(Types{}), ...);
 }
 
-static void doc2value(const String& key, Variant& value, JsonDocument& doc) {
-    if (value.isBool()) value = doc[key].as<bool>();
-    if (value.isDouble()) value = doc[key].as<double>();
-    if (value.isFloat()) value = doc[key].as<float>();
-    if (value.isString()) value = doc[key].as<const char*>();
-    if (value.isInt()) value = doc[key].as<int>();
-    if (value.isI8()) value = doc[key].as<int8_t>();
-    if (value.isU8()) value = doc[key].as<uint8_t>();
-    if (value.isI16()) value = doc[key].as<int16_t>();
-    if (value.isU16()) value = doc[key].as<uint16_t>();
-    if (value.isI32()) value = doc[key].as<int32_t>();
-    if (value.isU32()) value = doc[key].as<uint32_t>();
-    if (value.isI64()) value = doc[key].as<int64_t>();
-    if (value.isU64()) value = doc[key].as<uint64_t>();
+static void value2doc(Variant& value, JsonDocument& doc, const String& key) {
+    value2docImpl(value, doc, std::tuple<
+        bool, double, float, String, int, 
+        int8_t, uint8_t, int16_t, uint16_t, 
+        int32_t, uint32_t, int64_t, uint64_t
+    >{}, key);
+}
+
+template <typename... Types>
+void doc2valueImpl(Variant& value, JsonDocument& doc, std::tuple<Types...>, const String& key) {
+    auto assignValue = [&](auto type) {
+        using T = decltype(type);
+        if (value.is<T>()) {
+            value = doc[key].as<T>();
+        }
+    };
+    (assignValue(Types{}), ...);
+}
+
+static void doc2value(Variant& value, JsonDocument& doc, const String& key) {
+    doc2valueImpl(value, doc, std::tuple<
+        bool, double, float, String, int, 
+        int8_t, uint8_t, int16_t, uint16_t, 
+        int32_t, uint32_t, int64_t, uint64_t
+    >{}, key);
+}
+
+template <typename... Types>
+void jsonVariant2valueImpl(JsonVariant& jsonValue, Variant& value, std::tuple<Types...>) {
+    auto assignValue = [&](auto type) {
+        using T = decltype(type);
+        if (value.is<T>()) {
+            value = jsonValue.as<T>();
+        }
+    };
+    (assignValue(Types{}), ...);
 }
 
 void jsonVariant2value(JsonVariant& jsonValue, Variant& value) {
-    if (value.isString()) value = jsonValue.as<const char*>();
-    if (value.isBool()) value = jsonValue.as<bool>();
-    if (value.isInt()) value = jsonValue.as<int>();
-    if (value.isFloat()) value = jsonValue.as<float>();
-    if (value.isDouble()) value = jsonValue.as<double>();
-    if (value.isI8()) value = jsonValue.as<int8_t>();
-    if (value.isU8()) value = jsonValue.as<uint8_t>();
-    if (value.isI16()) value = jsonValue.as<int16_t>();
-    if (value.isU16()) value = jsonValue.as<uint16_t>();
-    if (value.isI32()) value = jsonValue.as<int32_t>();
-    if (value.isU32()) value = jsonValue.as<uint32_t>();
-    if (value.isI64()) value = jsonValue.as<int64_t>();
-    if (value.isU64()) value = jsonValue.as<uint64_t>();
+    jsonVariant2valueImpl(jsonValue, value, std::tuple<
+        String, bool, int, float, double, 
+        int8_t, uint8_t, int16_t, uint16_t, 
+        int32_t, uint32_t, int64_t, uint64_t
+    >{});
 }
 
 static void settings2doc(std::map<String, Variant>& settings, JsonDocument& doc) {
-    for (auto& [key, value] : settings) value2doc(key, value, doc);
+    for (auto& [key, value] : settings) value2doc(value, doc, key);
 }
 
 static void doc2settings(std::map<String, Variant>& settings, JsonDocument& doc) {
@@ -180,3 +192,7 @@ static void doc2settings(std::map<String, Variant>& settings, JsonDocument& doc)
         jsonVariant2value(jsonValue, value);
     }
 }
+
+static AsyncResponseStream* beginJsonResponse(AsyncWebServerRequest* request) {
+    return request->beginResponseStream("application/json");
+};
