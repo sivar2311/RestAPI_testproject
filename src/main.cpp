@@ -6,32 +6,30 @@
 #include "RestAPI.h"
 #include "WebPage.h"
 
-const char* WIFI_SSID = "SinricWiFi";
-const char* WIFI_PASS = "SinricWiFi";
-// const char* WIFI_SSID = "Wokwi-GUEST";
-// const char* WIFI_PASS = "";
+const char* WIFI_SSID = "Wokwi-GUEST";
+const char* WIFI_PASS = "";
 
 AsyncWebServer server(80);
 RestAPI        api(&server);
 Preferences    prefs;
 
 RestParameter parameters[] = {
-    {"Name", "John", R"({"test" : "dampf"})"},
+    {"Name", "John"},
     {"Alter", 46},
     {"Temperatur", 33.6f},
     {"Admin", false}};
 
 void loadSettings() {
     prefs.begin("rest-api");
-    for (auto& parameter : parameters) {
-        parameter.load(prefs);
-        if (parameter.uiSchema.length()) Serial.println(parameter.uiSchema);
-    }
+
+    for (auto& parameter : parameters) parameter.load(prefs);
+
     Serial.println("Values loaded");
 }
 
 void saveSettings() {
     for (auto& parameter : parameters) parameter.save(prefs);
+
     Serial.println("Values saved");
 }
 
@@ -61,8 +59,6 @@ void setupServer() {
         param.save(prefs);
     });
 
-    server.on("/save", HTTP_GET, [](AsyncWebServerRequest* req) { saveSettings(); req->send(200, "text/plain", "Values stored"); });
-    server.on("/load", HTTP_GET, [](AsyncWebServerRequest* req) { loadSettings(); req->send(200, "text/plain", "Values loaded"); });
     server.begin();
 }
 
