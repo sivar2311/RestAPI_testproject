@@ -12,7 +12,9 @@ class RestParameter {
     RestParameter(const String& key, const ArduinoVariant&& value, const String& uiSchema);
 
     void load(Preferences& pref);
-    void save(Preferences& pref);
+    void save(Preferences& pref) const;
+
+    const String type() const;
 
   public:
     String         key;

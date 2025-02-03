@@ -45,17 +45,7 @@ void RestAPI::pageGET(AsyncWebServerRequest* request) {
 void RestAPI::jsonSchemaGET(AsyncWebServerRequest* request) {
     JsonDocument doc;
 
-    for (auto& parameter : parameters) {
-        const char* key   = parameter->key.c_str();
-        auto&       value = parameter->value;
-        String      type  = "unknown";
-
-        if (value.is<bool>()) type = "boolean";
-        if (value.is<int>() || value.is<float>() || value.is<double>() || value.is<int8_t>() || value.is<uint8_t>() || value.is<int16_t>() || value.is<uint16_t>() || value.is<int32_t>() || value.is<uint32_t>() || value.is<int64_t>() || value.is<uint64_t>()) type = "number";
-        if (value.is<String>()) type = "string";
-
-        doc["properties"][key]["type"] = type;
-    }
+    for (auto& parameter : parameters) doc["properties"][parameter->key]["type"] = parameter->type();
 
     auto response = beginJsonResponse(request);
     serializeJson(doc, *response);
@@ -63,10 +53,21 @@ void RestAPI::jsonSchemaGET(AsyncWebServerRequest* request) {
 }
 
 void RestAPI::uiSchemaGET(AsyncWebServerRequest* request) {
-    JsonDocument doc;
+    JsonDocument responseDoc;
+
+    for (auto parameter : parameters) {
+        JsonDocument uiSchema;
+        if (deserializeJson(uiSchema, parameter->uiSchema) == DeserializationError::Ok) responseDoc[parameter->key]["schema"] = uiSchema.as<JsonObject>();
+    }
+    // for (auto parameter : parameters) {
+    //     if (parameter->uiSchema.length()) {
+    //         JsonDocument uiSchema;
+    //         if (deserializeJson(uiSchema, parameter->uiSchema) == DeserializationError::Ok) responseDoc[parameter->key]["schema"] = uiSchema.as<JsonObject>();
+    //     }
+    // }
 
     auto response = beginJsonResponse(request);
-    serializeJson(doc, *response);
+    serializeJson(responseDoc, *response);
     request->send(response);
 }
 
@@ -166,7 +167,6 @@ void RestAPI::handleDELETE(AsyncWebServerRequest* req) {
             value2doc(parameter->key, responseDoc, parameter->value);
             if (parameterChangeHandler) parameterChangeHandler(*parameter);
         }
-
     }
 
     serializeJson(responseDoc, *response);

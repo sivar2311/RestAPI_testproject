@@ -14,10 +14,10 @@ RestAPI        api(&server);
 Preferences    prefs;
 
 RestParameter parameters[] = {
-    {"Name", "John"},
+    {"Name", "John", R"({"ui:autofocus": true, "ui:enableMarkdownInDescription": true, "ui:description": "The **Name** of your User."})"},
     {"Alter", 46},
-    {"Temperatur", 33.6f},
-    {"Admin", false}};
+    {"Temperatur", 33.6f, R"({"ui:autofocus": false, "ui:enableMarkdownInDescription": true, "ui:description": "The **Temperature** of your User."})"},
+    {"Admin", false, R"({"ui:invalidJson...)"}};
 
 void loadSettings() {
     prefs.begin("rest-api");
