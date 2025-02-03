@@ -1,31 +1,50 @@
 #pragma once
 
+#if (__cplusplus < 201703L)
+#error "This library requires C++17 / Espressif32 Arduino 3.x"
+#else
+
 #include <ESPAsyncWebServer.h>
 
-#include "Settings.h"
+// #include "ArduinoVariant.h"
+#include <Preferences.h>
+#include <RestParameter.h>
 
-class RestAPI : public Settings {
+class RestAPI {
+  public:
+    using Req                    = AsyncWebServerRequest*;
+    using ParameterChangeHandler = std::function<void(RestParameter& parameter)>;
+
   public:
     RestAPI(AsyncWebServer* server);
 
-    using Settings::begin;
-    using Settings::end;
+    void addParameter(RestParameter* parameter);
 
-    void begin(const String& baseRoute, const String& pageRoute);
+    void begin(const String& baseRoute, const String& pageRoute, const String& pageTitle, const String& buttonText);
+
+    void onParameterChange(ParameterChangeHandler handler);
 
   protected:
     AsyncWebServer* server     = nullptr;
     String          baseRoute  = "";
     String          pageRoute  = "";
+    String          pageTitle  = "Configuration";
+    String          buttonText = "Send";
+
+    ParameterChangeHandler parameterChangeHandler = nullptr;
+
+    std::vector<RestParameter*> parameters;
 
   protected:
-    void pageGET(AsyncWebServerRequest* request);
+    void pageGET(Req request);
+    void jsonSchemaGET(Req request);
+    void uiSchemaGET(Req request);
 
-    void apiGET(AsyncWebServerRequest* request);
-    void apiPATCH(AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t offset, size_t total);
-    void elementGET(Variant& value, AsyncWebServerRequest* request);
-    void elementPATCH(Variant& value, AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t offset, size_t total);
-    void jsonSchemaGET(AsyncWebServerRequest* request);
+    void handleGET(Req);
+    void handlePATCH(Req req, uint8_t* data, size_t len, size_t offest, size_t total);
+    void handleDELETE(Req);
 
     void setupRoutes();
 };
+
+#endif

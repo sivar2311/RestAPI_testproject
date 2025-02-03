@@ -1,30 +1,38 @@
 #pragma once
 
+#if (__cplusplus < 201703L)
+#error "This library requires C++17 / Espressif32 Arduino 3.x"
+#else
+
+#include <Print.h>
+#include <Printable.h>
 #include <WString.h>
 #include <stdint.h>
-#include <Printable.h>
+#include <Preferences.h>
 #include <variant>
-#include <Print.h>
 
-class Variant : public Printable {
+class ArduinoVariant : public Printable {
   private:
     using VariantType = std::variant<std::monostate, int, float, double, bool, String, int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t>;
 
     VariantType value;
 
   public:
-    Variant() = default;
+    ArduinoVariant() = default;
 
     template <typename T, typename = std::enable_if_t<std::disjunction_v<std::is_same<T, std::monostate>, std::is_arithmetic<T>, std::is_same<T, String>>>>
-    Variant(T other);
+    ArduinoVariant(T other);
 
-    Variant(const char* other);
+    ArduinoVariant(const char* other);
 
     template <typename T>
     bool is() const;
 
+    bool isValid() const;
+    bool isInvalid() const;
+
     template <typename T, typename = std::enable_if_t<std::disjunction_v<std::is_same<T, std::monostate>, std::is_arithmetic<T>, std::is_same<T, String>>>>
-    Variant& operator=(T other);
+    ArduinoVariant& operator=(T other);
 
     template <typename T>
     explicit operator T() const;
@@ -32,31 +40,37 @@ class Variant : public Printable {
     template <typename T>
     T as() const;
 
+    void clear();
+
+    void load(const char* key, Preferences& pref);
+    void save(const char* key, Preferences& pref) const;
+
+  protected:
     size_t printTo(Print& printer) const;
 };
 
 template <typename T, typename>
-Variant::Variant(T other)
+ArduinoVariant::ArduinoVariant(T other)
     : value(other) {}
 
 template <typename T>
-bool Variant::is() const {
+bool ArduinoVariant::is() const {
     return std::holds_alternative<T>(value);
 }
 
 template <typename T, typename>
-Variant& Variant::operator=(T other) {
+ArduinoVariant& ArduinoVariant::operator=(T other) {
     value = other;
     return *this;
 }
 
 template <typename T>
-Variant::operator T() const {
+ArduinoVariant::operator T() const {
     return as<T>();
 }
 
 template <typename T>
-T Variant::as() const {
+T ArduinoVariant::as() const {
     return std::visit([](auto&& v) -> T {
         using Type = std::decay_t<decltype(v)>;
         if constexpr (std::is_same_v<Type, std::monostate>) {
@@ -94,5 +108,8 @@ T Variant::as() const {
         } else {
             return T();
         }
-    }, value);
+    },
+                      value);
 }
+
+#endif
