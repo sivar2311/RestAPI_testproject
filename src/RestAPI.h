@@ -1,14 +1,9 @@
 #pragma once
 
-#if (__cplusplus < 201703L)
-#error "This library requires C++17 / Espressif32 Arduino 3.x"
-#else
-
 #include <ESPAsyncWebServer.h>
-
-// #include "ArduinoVariant.h"
 #include <Preferences.h>
-#include <RestParameter.h>
+
+#include "RestParameter.h"
 
 class RestAPI {
   public:
@@ -17,10 +12,12 @@ class RestAPI {
 
   public:
     RestAPI(AsyncWebServer* server);
+    RestAPI(AsyncWebServer& server);
 
     void addParameter(RestParameter* parameter);
+    void addParameter(RestParameter& parameter);
 
-    void begin(const String& baseRoute, const String& pageRoute, const String& pageTitle, const String& buttonText);
+    void begin(const String& pageRoute, const String& pageTitle, const String& buttonText, const String& baseRoute = "");
 
     void onParameterChange(ParameterChangeHandler handler);
 
@@ -36,15 +33,13 @@ class RestAPI {
     std::vector<RestParameter*> parameters;
 
   protected:
-    void pageGET(Req request);
-    void jsonSchemaGET(Req request);
-    void uiSchemaGET(Req request);
+    void handlePage(Req request);
+    void handleJsonSchema(Req request);
+    void handleUISchema(Req request);
 
-    void handleGET(Req);
-    void handlePATCH(Req req, uint8_t* data, size_t len, size_t offest, size_t total);
-    void handleDELETE(Req);
+    void handleRestGET(Req);
+    void handleRestPATCH(Req req, uint8_t* data, size_t len, size_t offest, size_t total);
+    void handleRestDELETE(Req);
 
     void setupRoutes();
 };
-
-#endif

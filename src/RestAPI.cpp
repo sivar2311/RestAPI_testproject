@@ -1,11 +1,8 @@
-#if (__cplusplus < 201703L)
-#error "This library requires C++17 / Espressif32 Arduino 3.x"
-#else
-
 #include "RestAPI.h"
 
 #include <ArduinoJson.h>
-#include <AsyncJson.h>
+
+#include "WebPage.h"
 
 static AsyncResponseStream* beginJsonResponse(AsyncWebServerRequest* request);
 static std::vector<String>  splitPath(const String& basePath, AsyncWebServerRequest* req, const char* delimiter = "/");
@@ -40,7 +37,6 @@ void RestAPI::addParameter(RestParameter* parameter) {
 void RestAPI::onParameterChange(ParameterChangeHandler handler) { parameterChangeHandler = handler; }
 
 void RestAPI::handlePage(AsyncWebServerRequest* request) {
-    extern const char* webPage;
     request->send(200, "text/html", webPage, [&](const String& key) -> String {
         if (key == "API_ROUTE") return baseRoute;
         if (key == "JSON_SCHEMA_ROUTE") return pageRoute + "/jsonSchema";
@@ -247,5 +243,3 @@ static RestParameter* findParameter(std::vector<RestParameter*>& parameters, con
         if (parameter->key.equalsIgnoreCase(name)) return parameter;
     return nullptr;
 }
-
-#endif

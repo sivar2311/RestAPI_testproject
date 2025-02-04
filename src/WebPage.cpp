@@ -1,7 +1,3 @@
-#if (__cplusplus < 201703L)
-#error "This library requires C++17 / Espressif32 Arduino 3.x"
-#else
-
 const char* webPage = R"webPage(<html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -105,5 +101,3 @@ const char* webPage = R"webPage(<html lang="en">
 </body>
 </html>
 )webPage";
-
-#endif

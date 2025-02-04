@@ -6,7 +6,7 @@
 #include "RestAPI.h"
 #include "WebPage.h"
 
-const char* WIFI_SSID = "";
+const char* WIFI_SSID = "Wokwi-GUEST";
 const char* WIFI_PASS = "";
 
 AsyncWebServer server(80);
