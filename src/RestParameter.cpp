@@ -1,13 +1,13 @@
 #include "RestParameter.h"
 
 RestParameter::RestParameter(const String& key)
-    : key(key), uiSchema("") {}
+    : key(key), uiSchema("") {  }
 
 RestParameter::RestParameter(const String& key, const ArduinoVariant&& value)
-    : key(key), value(value), uiSchema("") {}
+    : key(key), value(value), uiSchema("") { }
 
 RestParameter::RestParameter(const String& key, const ArduinoVariant&& value, const String& uiSchema)
-    : key(key), value(value), uiSchema(uiSchema) {}
+    : key(key), value(value), uiSchema(uiSchema) { }
 
 void RestParameter::load(Preferences& pref) {
     value.load(key.c_str(), pref);
@@ -24,3 +24,7 @@ const String RestParameter::type() const {
     return "unknown";
 }
 
+bool RestParameter::operator==(RestParameter& other) const {
+    if (this == &other) return true;
+    return (other.key == key);
+}

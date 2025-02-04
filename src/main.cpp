@@ -6,43 +6,48 @@
 #include "RestAPI.h"
 #include "WebPage.h"
 
-const char* WIFI_SSID = "Wokwi-GUEST";
+const char* WIFI_SSID = "";
 const char* WIFI_PASS = "";
 
 AsyncWebServer server(80);
-RestAPI        api(&server);
+RestAPI        api(server);
 Preferences    prefs;
 
 RestParameter parameters[] = {
-    {"Name", "John", R"({"ui:autofocus": true, "ui:enableMarkdownInDescription": true, "ui:description": "The **Name** of your User."})"},
-    {"Alter", 46},
-    {"Temperatur", 33.6f, R"({"ui:autofocus": false, "ui:enableMarkdownInDescription": true, "ui:description": "The **Temperature** of your User."})"},
-    {"Admin", false, R"({"ui:invalidJson...)"}};
+    {"Username", "Your-Username", R"({"ui::focus" : true})"},
+    {"Password", "Your-Password"},
+};
 
-void loadSettings() {
+void loadParameters() {
     prefs.begin("rest-api");
 
-    for (auto& parameter : parameters) parameter.load(prefs);
-
-    Serial.println("Values loaded");
-}
-
-void saveSettings() {
-    for (auto& parameter : parameters) parameter.save(prefs);
-
-    Serial.println("Values saved");
+    for (auto& parameter : parameters) {
+        parameter.load(prefs);
+        Serial.printf("Parameter \"%s\" has been loaded\r\n", parameter.key.c_str());
+    }
 }
 
 void addParameters(RestAPI& api) {
-    for (auto& parameter : parameters) api.addParameter(&parameter);
+    for (auto& parameter : parameters) api.addParameter(parameter);
+}
+
+void handleParameterChange(RestParameter& parameter) {
+    parameter.save(prefs);
+
+    Serial.printf("Parameter \"%s\" changed to %s and has been saved.\r\n", parameter.key.c_str(), parameter.value.as<String>().c_str());
 }
 
 void setupWiFi() {
     Serial.print("Connecting Wifi");
-    WiFi.begin(WIFI_SSID, WIFI_PASS, 6);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    uint32_t start = millis();
     while (WiFi.status() != WL_CONNECTED) {
         Serial.print(".");
         delay(100);
+        if (millis() - start > 10000) {
+            WiFi.softAP("ESP32", "");
+            break;
+        }
     }
     Serial.println("connected");
     Serial.print("IP: ");
@@ -50,27 +55,25 @@ void setupWiFi() {
 }
 
 void setupServer() {
-    api.begin("/api/v1", "/settings", "Einstellungen", "Senden");
-
     addParameters(api);
 
-    api.onParameterChange([](RestParameter& param) {
-        Serial.printf("%s changed to %s\r\n", param.key.c_str(), param.value.as<String>().c_str());
-        param.save(prefs);
-    });
+    api.onParameterChange(handleParameterChange);
+    api.begin("/user", "Einstellungen", "Senden");
 
     server.begin();
+
+    Serial.printf("Open your browser and navigate to: http://%s/user\r\n", WiFi.localIP().toString().c_str());
 }
 
 void setup() {
     Serial.begin(115200);
 
-    loadSettings();
+    loadParameters();
     setupWiFi();
     setupServer();
 }
 
 void loop() {
-    Serial.printf("%d alive\r\n", millis());
+    Serial.printf("alive (%d)\r", millis() / 1000);
     delay(1000);
 }

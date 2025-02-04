@@ -16,6 +16,8 @@ class RestParameter {
 
     const String type() const;
 
+    bool operator==(RestParameter& other) const;
+
   public:
     String         key;
     ArduinoVariant value;

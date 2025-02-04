@@ -17,13 +17,20 @@ static RestParameter*       findParameter(std::vector<RestParameter*>& parameter
 RestAPI::RestAPI(AsyncWebServer* server)
     : server(server) {}
 
-void RestAPI::begin(const String& baseRoute, const String& pageRoute, const String& pageTitle, const String& buttonText) {
+RestAPI::RestAPI(AsyncWebServer& server)
+    : server(&server) {}
+
+void RestAPI::begin(const String& pageRoute, const String& pageTitle, const String& buttonText, const String& baseRoute) {
     if (!server) return;
-    this->baseRoute  = baseRoute;
     this->pageRoute  = pageRoute;
     this->pageTitle  = pageTitle;
     this->buttonText = buttonText;
+    this->baseRoute  = baseRoute.length() ? baseRoute : pageRoute + "/api";
     setupRoutes();
+}
+
+void RestAPI::addParameter(RestParameter& parameter) {
+    parameters.push_back(&parameter);
 }
 
 void RestAPI::addParameter(RestParameter* parameter) {
@@ -32,17 +39,18 @@ void RestAPI::addParameter(RestParameter* parameter) {
 
 void RestAPI::onParameterChange(ParameterChangeHandler handler) { parameterChangeHandler = handler; }
 
-void RestAPI::pageGET(AsyncWebServerRequest* request) {
+void RestAPI::handlePage(AsyncWebServerRequest* request) {
     extern const char* webPage;
     request->send(200, "text/html", webPage, [&](const String& key) -> String {
-        if (key == "BASE_URL") return baseRoute;
+        if (key == "API_ROUTE") return baseRoute;
+        if (key == "JSON_SCHEMA_ROUTE") return pageRoute + "/jsonSchema";
         if (key == "PAGE_TITLE") return pageTitle;
         if (key == "BUTTON_TEXT") return buttonText;
         return "";
     });
 }
 
-void RestAPI::jsonSchemaGET(AsyncWebServerRequest* request) {
+void RestAPI::handleJsonSchema(AsyncWebServerRequest* request) {
     JsonDocument doc;
 
     for (auto& parameter : parameters) doc["properties"][parameter->key]["type"] = parameter->type();
@@ -52,19 +60,13 @@ void RestAPI::jsonSchemaGET(AsyncWebServerRequest* request) {
     request->send(response);
 }
 
-void RestAPI::uiSchemaGET(AsyncWebServerRequest* request) {
+void RestAPI::handleUISchema(AsyncWebServerRequest* request) {
     JsonDocument responseDoc;
 
     for (auto parameter : parameters) {
         JsonDocument uiSchema;
         if (deserializeJson(uiSchema, parameter->uiSchema) == DeserializationError::Ok) responseDoc[parameter->key]["schema"] = uiSchema.as<JsonObject>();
     }
-    // for (auto parameter : parameters) {
-    //     if (parameter->uiSchema.length()) {
-    //         JsonDocument uiSchema;
-    //         if (deserializeJson(uiSchema, parameter->uiSchema) == DeserializationError::Ok) responseDoc[parameter->key]["schema"] = uiSchema.as<JsonObject>();
-    //     }
-    // }
 
     auto response = beginJsonResponse(request);
     serializeJson(responseDoc, *response);
@@ -76,7 +78,7 @@ static void setErrorKeyNotFound(JsonDocument& responseDoc, AsyncResponseStream* 
     responseDoc["error"] = "'" + key + "' not found";
 }
 
-void RestAPI::handleGET(AsyncWebServerRequest* req) {
+void RestAPI::handleRestGET(AsyncWebServerRequest* req) {
     auto pathElements = splitPath(baseRoute, req);
     auto response     = beginJsonResponse(req);
 
@@ -102,7 +104,7 @@ void RestAPI::handleGET(AsyncWebServerRequest* req) {
     req->send(response);
 }
 
-void RestAPI::handlePATCH(AsyncWebServerRequest* req, uint8_t* data, size_t size, size_t offset, size_t total) {
+void RestAPI::handleRestPATCH(AsyncWebServerRequest* req, uint8_t* data, size_t size, size_t offset, size_t total) {
     auto pathElements = splitPath(baseRoute, req);
 
     JsonDocument requestDoc;
@@ -144,7 +146,7 @@ void RestAPI::handlePATCH(AsyncWebServerRequest* req, uint8_t* data, size_t size
     req->send(response);
 }
 
-void RestAPI::handleDELETE(AsyncWebServerRequest* req) {
+void RestAPI::handleRestDELETE(AsyncWebServerRequest* req) {
     auto pathElements = splitPath(baseRoute, req);
 
     JsonDocument responseDoc;
@@ -176,17 +178,18 @@ void RestAPI::handleDELETE(AsyncWebServerRequest* req) {
 void RestAPI::setupRoutes() {
     if (!server) return;
 
-    String jsonSchemaRoute = baseRoute + "/jsonSchema";
-    String uiSchemaRoute   = baseRoute + "/uiSchema";
+    String jsonSchemaRoute = pageRoute + "/jsonSchema";
+    String uiSchemaRoute   = pageRoute + "/uiSchema";
 
-    server->on(pageRoute.c_str(), HTTP_GET, std::bind(&RestAPI::pageGET, this, std::placeholders::_1));
-    server->on(jsonSchemaRoute.c_str(), HTTP_GET, std::bind(&RestAPI::jsonSchemaGET, this, std::placeholders::_1));
-    server->on(uiSchemaRoute.c_str(), HTTP_GET, std::bind(&RestAPI::uiSchemaGET, this, std::placeholders::_1));
+    server->on(jsonSchemaRoute.c_str(), HTTP_GET, std::bind(&RestAPI::handleJsonSchema, this, std::placeholders::_1));
+    server->on(uiSchemaRoute.c_str(), HTTP_GET, std::bind(&RestAPI::handleUISchema, this, std::placeholders::_1));
 
     const char* baseRoute_str = baseRoute.c_str();
-    server->on(baseRoute_str, HTTP_GET, std::bind(&RestAPI::handleGET, this, std::placeholders::_1));
-    server->on(baseRoute_str, HTTP_PATCH | HTTP_POST | HTTP_PUT, NullHandler, nullptr, std::bind(&RestAPI::handlePATCH, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
-    server->on(baseRoute_str, HTTP_DELETE, std::bind(&RestAPI::handleDELETE, this, std::placeholders::_1));
+    server->on(baseRoute_str, HTTP_GET, std::bind(&RestAPI::handleRestGET, this, std::placeholders::_1));
+    server->on(baseRoute_str, HTTP_PATCH | HTTP_POST | HTTP_PUT, NullHandler, nullptr, std::bind(&RestAPI::handleRestPATCH, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+    server->on(baseRoute_str, HTTP_DELETE, std::bind(&RestAPI::handleRestDELETE, this, std::placeholders::_1));
+
+    server->on(pageRoute.c_str(), HTTP_GET, std::bind(&RestAPI::handlePage, this, std::placeholders::_1));
 }
 
 // Helper functions
@@ -241,7 +244,7 @@ static void NullHandler(AsyncWebServerRequest* req) {}
 
 static RestParameter* findParameter(std::vector<RestParameter*>& parameters, const String& name) {
     for (auto parameter : parameters)
-        if (parameter->key == name) return parameter;
+        if (parameter->key.equalsIgnoreCase(name)) return parameter;
     return nullptr;
 }
 
