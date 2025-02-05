@@ -4,23 +4,26 @@
 #error "This library requires C++17 / Espressif32 Arduino 3.x"
 #else
 
+#include <Preferences.h>
 #include <Print.h>
 #include <Printable.h>
 #include <WString.h>
 #include <stdint.h>
-#include <Preferences.h>
+
 #include <variant>
 
 class ArduinoVariant : public Printable {
-  private:
+  public:
     using VariantType = std::variant<std::monostate, int, float, double, bool, String, int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t>;
+    using VariantTuple = std::tuple<int, float, double, bool, String, int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t>;
 
-    VariantType value;
+  protected:
+    VariantType value = {};
 
   public:
     ArduinoVariant() = default;
 
-    template <typename T, typename = std::enable_if_t<std::disjunction_v<std::is_same<T, std::monostate>, std::is_arithmetic<T>, std::is_same<T, String>>>>
+    template <typename T, typename = std::enable_if_t<std::disjunction_v<std::is_same<T, std::monostate>, std::is_arithmetic<T>, std::is_same<T, String> > > >
     ArduinoVariant(T other);
 
     ArduinoVariant(const char* other);
@@ -31,7 +34,7 @@ class ArduinoVariant : public Printable {
     bool isValid() const;
     bool isInvalid() const;
 
-    template <typename T, typename = std::enable_if_t<std::disjunction_v<std::is_same<T, std::monostate>, std::is_arithmetic<T>, std::is_same<T, String>>>>
+    template <typename T, typename = std::enable_if_t<std::disjunction_v<std::is_same<T, std::monostate>, std::is_arithmetic<T>, std::is_same<T, String> > > >
     ArduinoVariant& operator=(T other);
 
     template <typename T>

@@ -7,9 +7,18 @@
 
 class RestParameter {
   public:
+    struct MinMax {
+        ArduinoVariant min = {};
+        ArduinoVariant max = {};
+    };
+
+    static const bool Password = true;
+
+  public:
     RestParameter(const String& key);
     RestParameter(const String& key, const ArduinoVariant&& value);
-    RestParameter(const String& key, const ArduinoVariant&& value, const String& uiSchema);
+    RestParameter(const String& key, const ArduinoVariant&& value, bool isPassword);
+    RestParameter(const String& key, const ArduinoVariant&& value, const MinMax&& minMax);
 
     void load(Preferences& pref);
     void save(Preferences& pref) const;
@@ -18,8 +27,14 @@ class RestParameter {
 
     bool operator==(RestParameter& other) const;
 
+    bool isNumber() const;
+    bool isString() const;
+    bool isBool() const;
+
   public:
     String         key;
     ArduinoVariant value;
-    String         uiSchema;
+    ArduinoVariant min        = {};
+    ArduinoVariant max        = {};
+    bool           isPassword = false;
 };

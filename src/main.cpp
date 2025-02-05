@@ -14,17 +14,18 @@ RestAPI        api(server);
 Preferences    prefs;
 
 RestParameter parameters[] = {
-    {"Username", "Your-Username", R"({"ui::focus" : true})"},
-    {"Password", "Your-Password"},
+    {"Username", "Your-Username"},
+    {"Password", "Your-Password", RestParameter::Password},
+    {"Range", 45, {-2.2f, 62}},
+    {"Number", 32},
 };
+
+auto& [username, password, range, number] = parameters;
+
 
 void loadParameters() {
     prefs.begin("rest-api");
-
-    for (auto& parameter : parameters) {
-        parameter.load(prefs);
-        Serial.printf("Parameter \"%s\" has been loaded\r\n", parameter.key.c_str());
-    }
+    for (auto& parameter : parameters) parameter.load(prefs);
 }
 
 void addParameters(RestAPI& api) {
@@ -40,14 +41,9 @@ void handleParameterChange(RestParameter& parameter) {
 void setupWiFi() {
     Serial.print("Connecting Wifi");
     WiFi.begin(WIFI_SSID, WIFI_PASS);
-    uint32_t start = millis();
     while (WiFi.status() != WL_CONNECTED) {
         Serial.print(".");
         delay(100);
-        if (millis() - start > 10000) {
-            WiFi.softAP("ESP32", "");
-            break;
-        }
     }
     Serial.println("connected");
     Serial.print("IP: ");
@@ -58,7 +54,7 @@ void setupServer() {
     addParameters(api);
 
     api.onParameterChange(handleParameterChange);
-    api.begin("/user", "Einstellungen", "Senden");
+    api.begin("/user", "User", "save");
 
     server.begin();
 

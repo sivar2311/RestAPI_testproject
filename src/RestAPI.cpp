@@ -1,11 +1,16 @@
+#if (__cplusplus < 201703L)
+#error "This library requires C++17 / Espressif32 Arduino 3.x"
+#else
+
 #include "RestAPI.h"
 
 #include <ArduinoJson.h>
+#include <AsyncJson.h>
 
-#include "WebPage.h"
-
+#include <variant>
 static AsyncResponseStream* beginJsonResponse(AsyncWebServerRequest* request);
 static std::vector<String>  splitPath(const String& basePath, AsyncWebServerRequest* req, const char* delimiter = "/");
+static void                 value2json(ArduinoVariant& value, JsonVariant&& json);
 static void                 doc2value(const String& key, JsonDocument& doc, ArduinoVariant& value);
 static void                 value2doc(const String& key, JsonDocument& doc, ArduinoVariant& value);
 static void                 NullHandler(AsyncWebServerRequest* request);
@@ -17,12 +22,13 @@ RestAPI::RestAPI(AsyncWebServer* server)
 RestAPI::RestAPI(AsyncWebServer& server)
     : server(&server) {}
 
-void RestAPI::begin(const String& pageRoute, const String& pageTitle, const String& buttonText, const String& baseRoute) {
+void RestAPI::begin(const String& baseRoute, const String& pageTitle, const String& buttonText) {
     if (!server) return;
-    this->pageRoute  = pageRoute;
+    this->baseRoute  = baseRoute;
+    this->formRoute  = baseRoute + "/form";
+    this->apiRoute   = baseRoute + "/api";
     this->pageTitle  = pageTitle;
     this->buttonText = buttonText;
-    this->baseRoute  = baseRoute.length() ? baseRoute : pageRoute + "/api";
     setupRoutes();
 }
 
@@ -37,35 +43,31 @@ void RestAPI::addParameter(RestParameter* parameter) {
 void RestAPI::onParameterChange(ParameterChangeHandler handler) { parameterChangeHandler = handler; }
 
 void RestAPI::handlePage(AsyncWebServerRequest* request) {
+    extern const char* webPage;
     request->send(200, "text/html", webPage, [&](const String& key) -> String {
-        if (key == "API_ROUTE") return baseRoute;
-        if (key == "JSON_SCHEMA_ROUTE") return pageRoute + "/jsonSchema";
+        if (key == "FORM_ROUTE") return baseRoute + "/form";
         if (key == "PAGE_TITLE") return pageTitle;
         if (key == "BUTTON_TEXT") return buttonText;
         return "";
     });
 }
 
-void RestAPI::handleJsonSchema(AsyncWebServerRequest* request) {
+void RestAPI::handleFormGET(AsyncWebServerRequest* request) {
     JsonDocument doc;
 
-    for (auto& parameter : parameters) doc["properties"][parameter->key]["type"] = parameter->type();
+    JsonObject props = doc.to<JsonObject>();
 
-    auto response = beginJsonResponse(request);
-    serializeJson(doc, *response);
-    request->send(response);
-}
-
-void RestAPI::handleUISchema(AsyncWebServerRequest* request) {
-    JsonDocument responseDoc;
-
-    for (auto parameter : parameters) {
-        JsonDocument uiSchema;
-        if (deserializeJson(uiSchema, parameter->uiSchema) == DeserializationError::Ok) responseDoc[parameter->key]["schema"] = uiSchema.as<JsonObject>();
+    for (auto& parameter : parameters) {
+        JsonObject element = props[parameter->key].to<JsonObject>();
+        element["type"]    = parameter->type();
+        value2json(parameter->value, element["value"].to<JsonVariant>());
+        if (parameter->min.isValid()) value2json(parameter->min, element["min"].to<JsonVariant>());
+        if (parameter->max.isValid()) value2json(parameter->max, element["max"].to<JsonVariant>());
+        if (parameter->isString() && parameter->isPassword) element["password"] = true;
     }
 
     auto response = beginJsonResponse(request);
-    serializeJson(responseDoc, *response);
+    serializeJson(doc, *response);
     request->send(response);
 }
 
@@ -75,7 +77,7 @@ static void setErrorKeyNotFound(JsonDocument& responseDoc, AsyncResponseStream* 
 }
 
 void RestAPI::handleRestGET(AsyncWebServerRequest* req) {
-    auto pathElements = splitPath(baseRoute, req);
+    auto pathElements = splitPath(apiRoute, req);
     auto response     = beginJsonResponse(req);
 
     JsonDocument responseDoc;
@@ -100,8 +102,36 @@ void RestAPI::handleRestGET(AsyncWebServerRequest* req) {
     req->send(response);
 }
 
+void RestAPI::handleFormPOST(AsyncWebServerRequest* req, uint8_t* data, size_t size, size_t offset, size_t total) {
+    JsonDocument requestDoc;
+    auto         jsonError = deserializeJson(requestDoc, data, size);
+
+    JsonDocument responseDoc;
+    auto         response = beginJsonResponse(req);
+
+    if (jsonError) {
+        responseDoc["error"] = jsonError.c_str();
+        serializeJson(responseDoc, *response);
+        req->send(response);
+        return;
+    }
+
+    for (auto jsonPair : requestDoc.as<JsonObject>()) {
+        auto key       = jsonPair.key().c_str();
+        auto parameter = findParameter(parameters, key);
+        if (parameter) {
+            doc2value(key, requestDoc, parameter->value);
+            value2doc(key, responseDoc, parameter->value);
+        }
+        if (parameterChangeHandler) parameterChangeHandler(*parameter);
+    }
+
+    serializeJson(responseDoc, *response);
+    req->send(response);    
+}
+
 void RestAPI::handleRestPATCH(AsyncWebServerRequest* req, uint8_t* data, size_t size, size_t offset, size_t total) {
-    auto pathElements = splitPath(baseRoute, req);
+    auto pathElements = splitPath(apiRoute, req);
 
     JsonDocument requestDoc;
     auto         jsonError = deserializeJson(requestDoc, data, size);
@@ -117,6 +147,7 @@ void RestAPI::handleRestPATCH(AsyncWebServerRequest* req, uint8_t* data, size_t 
     }
 
     if (pathElements.size()) {
+        Serial.println("im /user/api/element zweig");
         const String& key = pathElements[0];
 
         auto parameter = findParameter(parameters, key);
@@ -133,6 +164,7 @@ void RestAPI::handleRestPATCH(AsyncWebServerRequest* req, uint8_t* data, size_t 
             auto parameter = findParameter(parameters, key);
             if (parameter) {
                 doc2value(key, requestDoc, parameter->value);
+                value2doc(key, responseDoc, parameter->value);
             }
             if (parameterChangeHandler) parameterChangeHandler(*parameter);
         }
@@ -143,7 +175,7 @@ void RestAPI::handleRestPATCH(AsyncWebServerRequest* req, uint8_t* data, size_t 
 }
 
 void RestAPI::handleRestDELETE(AsyncWebServerRequest* req) {
-    auto pathElements = splitPath(baseRoute, req);
+    auto pathElements = splitPath(apiRoute, req);
 
     JsonDocument responseDoc;
     auto         response = beginJsonResponse(req);
@@ -174,18 +206,13 @@ void RestAPI::handleRestDELETE(AsyncWebServerRequest* req) {
 void RestAPI::setupRoutes() {
     if (!server) return;
 
-    String jsonSchemaRoute = pageRoute + "/jsonSchema";
-    String uiSchemaRoute   = pageRoute + "/uiSchema";
+    server->on(formRoute.c_str(), HTTP_GET | HTTP_POST, std::bind(&RestAPI::handleFormGET, this, std::placeholders::_1), nullptr, std::bind(&RestAPI::handleFormPOST, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
 
-    server->on(jsonSchemaRoute.c_str(), HTTP_GET, std::bind(&RestAPI::handleJsonSchema, this, std::placeholders::_1));
-    server->on(uiSchemaRoute.c_str(), HTTP_GET, std::bind(&RestAPI::handleUISchema, this, std::placeholders::_1));
+    server->on(apiRoute.c_str(), HTTP_GET, std::bind(&RestAPI::handleRestGET, this, std::placeholders::_1));
+    server->on(apiRoute.c_str(), HTTP_PATCH | HTTP_POST | HTTP_PUT, NullHandler, nullptr, std::bind(&RestAPI::handleRestPATCH, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+    server->on(apiRoute.c_str(), HTTP_DELETE, std::bind(&RestAPI::handleRestDELETE, this, std::placeholders::_1));
 
-    const char* baseRoute_str = baseRoute.c_str();
-    server->on(baseRoute_str, HTTP_GET, std::bind(&RestAPI::handleRestGET, this, std::placeholders::_1));
-    server->on(baseRoute_str, HTTP_PATCH | HTTP_POST | HTTP_PUT, NullHandler, nullptr, std::bind(&RestAPI::handleRestPATCH, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
-    server->on(baseRoute_str, HTTP_DELETE, std::bind(&RestAPI::handleRestDELETE, this, std::placeholders::_1));
-
-    server->on(pageRoute.c_str(), HTTP_GET, std::bind(&RestAPI::handlePage, this, std::placeholders::_1));
+    server->on(baseRoute.c_str(), HTTP_GET, std::bind(&RestAPI::handlePage, this, std::placeholders::_1));
 }
 
 // Helper functions
@@ -220,7 +247,20 @@ static void doc2valueImpl(const String& key, JsonDocument& doc, ArduinoVariant& 
 }
 
 static void doc2value(const String& key, JsonDocument& doc, ArduinoVariant& value) {
-    doc2valueImpl(key, doc, value, std::tuple<bool, double, float, String, int, int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t>{});
+    doc2valueImpl(key, doc, value, ArduinoVariant::VariantTuple{});
+}
+
+template <typename... Types>
+static void value2jsonImpl(ArduinoVariant& value, JsonVariant& json, std::tuple<Types...>) {
+    auto assignValue = [&](auto type) {
+        using T = decltype(type);
+        if (value.is<T>()) json.set(static_cast<T>(value));
+    };
+    (assignValue(Types{}), ...);
+}
+
+static void value2json(ArduinoVariant& value, JsonVariant&& json) {
+    value2jsonImpl(value, json, ArduinoVariant::VariantTuple{});
 }
 
 template <typename... Types>
@@ -233,7 +273,7 @@ static void value2docImpl(const String& key, JsonDocument& doc, ArduinoVariant& 
 }
 
 static void value2doc(const String& key, JsonDocument& doc, ArduinoVariant& value) {
-    value2docImpl(key, doc, value, std::tuple<bool, double, float, String, int, int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t>{});
+    value2docImpl(key, doc, value, ArduinoVariant::VariantTuple{});
 }
 
 static void NullHandler(AsyncWebServerRequest* req) {}
@@ -243,3 +283,5 @@ static RestParameter* findParameter(std::vector<RestParameter*>& parameters, con
         if (parameter->key.equalsIgnoreCase(name)) return parameter;
     return nullptr;
 }
+
+#endif
