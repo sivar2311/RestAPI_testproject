@@ -18,9 +18,11 @@ RestParameter parameters[] = {
     {"Password", "Your-Password", RestParameter::Password},
     {"Range", 45, {-2.2f, 62}},
     {"Number", 32},
+    {"DeviceID-1", "1111111111111111"},
+    {"DeviceID-2", "2222222222222222"}
 };
 
-auto& [username, password, range, number] = parameters;
+auto& [username, password, range, number, deviceId1, deviceId2] = parameters;
 
 
 void loadParameters() {
